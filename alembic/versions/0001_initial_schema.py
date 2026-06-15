@@ -19,7 +19,7 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
     # ------------------------------------------------------------------ #
-    # Enums (idempotent — je ein DO-Block pro op.execute für asyncpg)    #
+    # Enums (idempotent — Existenz via pg_type prüfen, dann CREATE TYPE) #
     # ------------------------------------------------------------------ #
     _enums = [
         ("source_type", "'law','guideline','expert_text','directory'"),
@@ -33,11 +33,13 @@ def upgrade() -> None:
         ("pathway_status", "'draft','in_review','approved','published','superseded','withdrawn'"),
         ("decision_node_input_type", "'boolean','enum','text'"),
     ]
+    conn = op.get_bind()
     for type_name, labels in _enums:
-        op.execute(
-            f"DO $$ BEGIN CREATE TYPE {type_name} AS ENUM ({labels});"
-            f" EXCEPTION WHEN duplicate_object THEN NULL; END $$;"
-        )
+        exists = conn.execute(
+            sa.text("SELECT 1 FROM pg_type WHERE typname = :n"), {"n": type_name}
+        ).scalar()
+        if not exists:
+            conn.execute(sa.text(f"CREATE TYPE {type_name} AS ENUM ({labels})"))
 
     # ------------------------------------------------------------------ #
     # Quell-Entitäten                                                      #
