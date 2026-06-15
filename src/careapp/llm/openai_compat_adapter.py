@@ -74,20 +74,31 @@ class OpenAICompatLLMClient:
 
         # Drei-Kanal: System-Regeln + eingebettetes JSON-Schema → system-Message.
         # Daten-Kanäle + Task → user-Message.
-        schema_json = json.dumps(
-            request.response_schema.model_json_schema(),
-            ensure_ascii=False,
-            indent=2,
-        )
+        schema = request.response_schema.model_json_schema()
+        schema_json = json.dumps(schema, ensure_ascii=False, indent=2)
+        # Feldnamen explizit auflisten damit das Modell keine eigenen erfindet.
+        field_names = ", ".join(f'"{k}"' for k in schema.get("properties", {}).keys())
         full_system = (
             f"{request.prompt.system_rules}\n\n"
-            f"Antworte AUSSCHLIESSLICH mit gültigem JSON gemäß diesem Schema:\n"
-            f"```json\n{schema_json}\n```\n"
-            f"Kein Text außerhalb des JSON-Objekts, kein Markdown-Wrapper."
+            f"Antworte AUSSCHLIESSLICH mit einem JSON-Objekt. "
+            f"Pflichtfelder (exakt diese Namen verwenden): {field_names}.\n"
+            f"Schema:\n```json\n{schema_json}\n```\n"
+            f"Kein Text außerhalb des JSON-Objekts, kein Markdown-Wrapper, keine Erklärungen."
         )
 
         data_payload = request.prompt.render_data_payload()
         user_content = f"{data_payload}\n\n[TASK]\n{request.prompt.task}".strip()
+
+        # json_schema-Modus erzwingt Schema-Konformität serverseitig (bevorzugt).
+        # Fallback auf json_object wenn der Anbieter json_schema nicht unterstützt.
+        json_schema_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": request.response_schema.__name__,
+                "schema": schema,
+                "strict": False,
+            },
+        }
 
         t0 = time.monotonic()
         try:
@@ -97,17 +108,29 @@ class OpenAICompatLLMClient:
                     {"role": "system", "content": full_system},
                     {"role": "user", "content": user_content},
                 ],
-                response_format={"type": "json_object"},
+                response_format=json_schema_format,
                 max_tokens=request.budget.max_output_tokens,
                 timeout=request.budget.timeout_seconds,
             )
-        except Exception as exc:  # noqa: BLE001
-            return LLMResult(
-                parsed=None,
-                raw_text="",
-                parse_error=f"llm call failed: {type(exc).__name__}: {exc}",
-                audit=request.audit,
-            )
+        except Exception:  # noqa: BLE001 — json_schema nicht unterstützt → Fallback
+            try:
+                response = self._client.chat.completions.create(
+                    model=model_id,
+                    messages=[
+                        {"role": "system", "content": full_system},
+                        {"role": "user", "content": user_content},
+                    ],
+                    response_format={"type": "json_object"},
+                    max_tokens=request.budget.max_output_tokens,
+                    timeout=request.budget.timeout_seconds,
+                )
+            except Exception as exc2:
+                return LLMResult(
+                    parsed=None,
+                    raw_text="",
+                    parse_error=f"llm call failed: {type(exc2).__name__}: {exc2}",
+                    audit=request.audit,
+                )
 
         latency_ms = round((time.monotonic() - t0) * 1000)
         raw_text = (response.choices[0].message.content or "") if response.choices else ""
