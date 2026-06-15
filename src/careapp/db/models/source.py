@@ -20,7 +20,7 @@ class SourceDocument(Base):
     __tablename__ = "source_document"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    type: Mapped[SourceType] = mapped_column(SAEnum(SourceType, name="source_type"), nullable=False)
+    type: Mapped[SourceType] = mapped_column(SAEnum(SourceType, name="source_type", create_type=False), nullable=False)
     publisher: Mapped[str] = mapped_column(String(500), nullable=False)
     canonical_ref: Mapped[str] = mapped_column(String(1000), nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

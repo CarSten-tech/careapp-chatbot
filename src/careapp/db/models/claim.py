@@ -70,7 +70,7 @@ class Claim(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     topic_scope: Mapped[str] = mapped_column(String(200), nullable=False)
     region_binding: Mapped[RegionBinding] = mapped_column(
-        SAEnum(RegionBinding, name="region_binding"), nullable=False
+        SAEnum(RegionBinding, name="region_binding", create_type=False), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -89,7 +89,7 @@ class ClaimVersion(Base):
     claim_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("claim.id"), nullable=False)
     statement_text: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[ClaimVersionStatus] = mapped_column(
-        SAEnum(ClaimVersionStatus, name="claim_version_status"),
+        SAEnum(ClaimVersionStatus, name="claim_version_status", create_type=False),
         nullable=False,
         default=ClaimVersionStatus.draft,
     )
@@ -125,7 +125,7 @@ class ClaimEvidence(Base):
     claim_version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("claim_version.id"), nullable=False)
     source_passage_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("source_passage.id"), nullable=False)
     role: Mapped[EvidenceRole] = mapped_column(
-        SAEnum(EvidenceRole, name="evidence_role"), nullable=False
+        SAEnum(EvidenceRole, name="evidence_role", create_type=False), nullable=False
     )
     quote: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -141,7 +141,7 @@ class StructuredValue(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     claim_version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("claim_version.id"), nullable=False)
     kind: Mapped[StructuredValueKind] = mapped_column(
-        SAEnum(StructuredValueKind, name="structured_value_kind"), nullable=False
+        SAEnum(StructuredValueKind, name="structured_value_kind", create_type=False), nullable=False
     )
     value: Mapped[str] = mapped_column(String(500), nullable=False)
     unit: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
@@ -155,7 +155,7 @@ class ScopeAssignment(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     claim_version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("claim_version.id"), nullable=False)
     dimension: Mapped[ScopeDimension] = mapped_column(
-        SAEnum(ScopeDimension, name="scope_dimension"), nullable=False
+        SAEnum(ScopeDimension, name="scope_dimension", create_type=False), nullable=False
     )
     value: Mapped[str] = mapped_column(String(500), nullable=False)
     applies: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -172,7 +172,7 @@ class ClaimRelation(Base):
     from_claim_version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("claim_version.id"), nullable=False)
     to_claim_version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("claim_version.id"), nullable=False)
     kind: Mapped[ClaimRelationKind] = mapped_column(
-        SAEnum(ClaimRelationKind, name="claim_relation_kind"), nullable=False
+        SAEnum(ClaimRelationKind, name="claim_relation_kind", create_type=False), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -198,7 +198,7 @@ class Approval(Base):
     )
     actor_id: Mapped[str] = mapped_column(String(200), nullable=False)
     actor_role: Mapped[ActorRole] = mapped_column(
-        SAEnum(ActorRole, name="actor_role"), nullable=False
+        SAEnum(ActorRole, name="actor_role", create_type=False), nullable=False
     )
     action: Mapped[str] = mapped_column(String(50), nullable=False)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
