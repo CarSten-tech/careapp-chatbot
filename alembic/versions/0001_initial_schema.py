@@ -16,7 +16,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE EXTENSION IF NOT EXISTS pgvector;")
+    op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
     # ------------------------------------------------------------------ #
     # Enums                                                                #

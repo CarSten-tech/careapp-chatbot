@@ -73,7 +73,7 @@ jobs:
           PGPASSWORD: careapp
         run: |
           sudo apt-get install -y postgresql-client
-          psql -h localhost -U careapp -d careapp_test -c "CREATE EXTENSION IF NOT EXISTS pgvector;"
+          psql -h localhost -U careapp -d careapp_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
@@ -132,7 +132,7 @@ jobs:
           PGPASSWORD: careapp
         run: |
           sudo apt-get install -y postgresql-client
-          psql -h localhost -U careapp -d careapp_test -c "CREATE EXTENSION IF NOT EXISTS pgvector;"
+          psql -h localhost -U careapp -d careapp_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
