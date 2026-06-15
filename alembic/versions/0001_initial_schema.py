@@ -19,40 +19,25 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
     # ------------------------------------------------------------------ #
-    # Enums (idempotent — DO-Block fängt duplicate_object ab)             #
+    # Enums (idempotent — je ein DO-Block pro op.execute für asyncpg)    #
     # ------------------------------------------------------------------ #
-    op.execute("""
-DO $$ BEGIN
-    CREATE TYPE source_type AS ENUM ('law','guideline','expert_text','directory');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-    CREATE TYPE region_binding AS ENUM ('region_independent','region_specific');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-    CREATE TYPE claim_version_status AS ENUM ('draft','in_review','approved','published','superseded','withdrawn','expired');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-    CREATE TYPE evidence_role AS ENUM ('carrying','supporting','contextual');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-    CREATE TYPE structured_value_kind AS ENUM ('amount_eur','deadline_days','date','percentage','count','duration_months');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-    CREATE TYPE scope_dimension AS ENUM ('region','target_group','topic');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-    CREATE TYPE claim_relation_kind AS ENUM ('supersedes','requires','exception_to','applies_with','conflicts_with');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-    CREATE TYPE actor_role AS ENUM ('author','editor','chief_editor','importer','regional_editor','org_admin','system_admin');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-    CREATE TYPE pathway_status AS ENUM ('draft','in_review','approved','published','superseded','withdrawn');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-DO $$ BEGIN
-    CREATE TYPE decision_node_input_type AS ENUM ('boolean','enum','text');
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
-""")
+    _enums = [
+        ("source_type", "'law','guideline','expert_text','directory'"),
+        ("region_binding", "'region_independent','region_specific'"),
+        ("claim_version_status", "'draft','in_review','approved','published','superseded','withdrawn','expired'"),
+        ("evidence_role", "'carrying','supporting','contextual'"),
+        ("structured_value_kind", "'amount_eur','deadline_days','date','percentage','count','duration_months'"),
+        ("scope_dimension", "'region','target_group','topic'"),
+        ("claim_relation_kind", "'supersedes','requires','exception_to','applies_with','conflicts_with'"),
+        ("actor_role", "'author','editor','chief_editor','importer','regional_editor','org_admin','system_admin'"),
+        ("pathway_status", "'draft','in_review','approved','published','superseded','withdrawn'"),
+        ("decision_node_input_type", "'boolean','enum','text'"),
+    ]
+    for type_name, labels in _enums:
+        op.execute(
+            f"DO $$ BEGIN CREATE TYPE {type_name} AS ENUM ({labels});"
+            f" EXCEPTION WHEN duplicate_object THEN NULL; END $$;"
+        )
 
     # ------------------------------------------------------------------ #
     # Quell-Entitäten                                                      #
