@@ -149,6 +149,7 @@ class OpenAICompatLLMClient:
 
         metered_audit = dataclasses.replace(
             request.audit,
+            model_id=model_id,  # tatsächlich genutztes Provider-Modell (nicht Audit-Label)
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             latency_ms=latency_ms,
@@ -159,7 +160,10 @@ class OpenAICompatLLMClient:
             parsed = request.response_schema.model_validate_json(raw_text)
         except Exception as exc:  # noqa: BLE001
             import logging as _log
-            _log.getLogger(__name__).error("Schema parse failed. raw=%r error=%s", raw_text[:200], exc)
+            _log.getLogger(__name__).error(
+                "Schema parse failed: schema=%s response_len=%d error=%s",
+                request.response_schema.__name__, len(raw_text), type(exc).__name__,
+            )
             return LLMResult(
                 parsed=None,
                 raw_text=raw_text,
