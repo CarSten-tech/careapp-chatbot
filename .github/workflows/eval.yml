@@ -68,6 +68,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Enable pgvector extension
+        env:
+          PGPASSWORD: careapp
+        run: |
+          sudo apt-get install -y postgresql-client
+          psql -h localhost -U careapp -d careapp_test -c "CREATE EXTENSION IF NOT EXISTS pgvector;"
+
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
@@ -119,6 +126,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Enable pgvector extension
+        env:
+          PGPASSWORD: careapp
+        run: |
+          sudo apt-get install -y postgresql-client
+          psql -h localhost -U careapp -d careapp_test -c "CREATE EXTENSION IF NOT EXISTS pgvector;"
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
