@@ -23,9 +23,7 @@ export default function BlockRenderer({ block, onAnswer }: Props) {
       return <ClarifyBlock block={block} onAnswer={onAnswer} />;
 
     case "empathy":
-      return (
-        <p className="text-sm text-gray-600 italic leading-relaxed">{block.text}</p>
-      );
+      return <p className="text-sm text-gray-500 leading-relaxed">{block.text}</p>;
 
     default:
       // Unbekannter Typ: sicher ignorieren (client-seitige Allowlist-Analogie)
