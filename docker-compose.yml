@@ -1,0 +1,36 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: careapp
+      POSTGRES_PASSWORD: careapp_dev
+      POSTGRES_DB: careapp_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careapp -d careapp_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  db_test:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: careapp
+      POSTGRES_PASSWORD: careapp_dev
+      POSTGRES_DB: careapp_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata_test:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careapp -d careapp_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  pgdata_test:

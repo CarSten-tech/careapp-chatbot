@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose *)",
+      "Read(//Applications/**)",
+      "Read(//usr/local/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(python3 -m uv --version)",
+      "Bash(uvx --version)",
+      "Bash(uv --version)",
+      "Bash(pip3 --version)",
+      "Bash(brew --version)",
+      "Bash(brew install *)",
+      "mcp__f7ccabfe-0ffd-4b3a-b11c-d5518f81950f__list_projects",
+      "mcp__f7ccabfe-0ffd-4b3a-b11c-d5518f81950f__list_extensions",
+      "mcp__f7ccabfe-0ffd-4b3a-b11c-d5518f81950f__apply_migration",
+      "mcp__f7ccabfe-0ffd-4b3a-b11c-d5518f81950f__list_tables",
+      "mcp__f7ccabfe-0ffd-4b3a-b11c-d5518f81950f__get_project_url"
+    ]
+  }
+}

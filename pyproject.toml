@@ -1,0 +1,71 @@
+[project]
+name = "careapp"
+version = "0.1.0"
+description = "CareApp – Chatbot mit kontrollierter Wissensbasis"
+requires-python = ">=3.12"
+dependencies = [
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "pgvector>=0.3",
+    "pydantic>=2.0",
+    "python-dotenv>=1.0",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-jose[cryptography]>=3.3",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+# Referenz-LLM-Adapter (Anthropic). Optional — der Kern ist anbieter-agnostisch
+# und ohne dieses Extra voll testbar. Produktiver Anbieter ist offen (Architektur §6).
+llm = [
+    "anthropic>=0.40",
+]
+# API-Schicht (Layer 6). Erst nötig wenn der FastAPI-Server deployed wird.
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-jose[cryptography]>=3.3",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/careapp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+markers = [
+    "hard_gate: blocking safety gate test — failure is a CI stop signal (§3)",
+    "pilot_entry: pilot entry checklist item — must pass before first pilot run (§5.1)",
+    "db: requires a live database connection (skipped in pure-offline CI)",
+    "llm: requires ANTHROPIC_API_KEY — calls the live Anthropic API (skipped if key missing)",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.0",
+    "pytest-asyncio>=1.4.0",
+]
