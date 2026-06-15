@@ -27,6 +27,7 @@ dev = [
 # und ohne dieses Extra voll testbar. Produktiver Anbieter ist offen (Architektur §6).
 llm = [
     "anthropic>=0.40",
+    "openai>=1.50",
 ]
 # API-Schicht (Layer 6). Erst nötig wenn der FastAPI-Server deployed wird.
 api = [

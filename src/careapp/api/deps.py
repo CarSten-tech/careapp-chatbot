@@ -66,22 +66,46 @@ DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 
 def get_llm_client() -> LLMClient:
     """
-    Produktiv: AnthropicLLMClient (wenn ANTHROPIC_API_KEY gesetzt).
-    DEV_LLM=fake: FakeLLMClient (kein LLM-Aufruf, für lokale Entwicklung).
+    Priorität:
+    1. DEV_LLM=fake → FakeLLMClient (kein LLM-Aufruf)
+    2. NVIDIA_API_KEY gesetzt → OpenAICompatLLMClient (NVIDIA NIM / Kimi K2.6)
+    3. ANTHROPIC_API_KEY gesetzt → AnthropicLLMClient
     Tests überschreiben via dependency_overrides.
     """
     if os.environ.get("DEV_LLM") == "fake":
         return FakeLLMClient()
 
-    try:
-        from careapp.llm.anthropic_adapter import AnthropicLLMClient  # type: ignore[import]
-
-        return AnthropicLLMClient()
-    except ImportError:
-        raise RuntimeError(
-            "AnthropicLLMClient nicht verfügbar — uv sync --extra llm ausführen "
-            "oder DEV_LLM=fake setzen"
+    if os.environ.get("NVIDIA_API_KEY"):
+        try:
+            from careapp.llm.openai_compat_adapter import OpenAICompatLLMClient
+        except ImportError:
+            raise RuntimeError(
+                "OpenAICompatLLMClient nicht verfügbar — uv sync --extra llm ausführen."
+            )
+        return OpenAICompatLLMClient(
+            api_key=os.environ["NVIDIA_API_KEY"],
+            base_url=os.environ.get(
+                "NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"
+            ),
+            default_model_id=os.environ.get(
+                "NVIDIA_MODEL_ID", "moonshotai/kimi-k2.6"
+            ),
         )
+
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        try:
+            from careapp.llm.anthropic_adapter import AnthropicLLMClient  # type: ignore[import]
+
+            return AnthropicLLMClient()
+        except ImportError:
+            raise RuntimeError(
+                "AnthropicLLMClient nicht verfügbar — uv sync --extra llm ausführen."
+            )
+
+    raise RuntimeError(
+        "Kein LLM-Anbieter konfiguriert. "
+        "Setze NVIDIA_API_KEY oder ANTHROPIC_API_KEY, oder DEV_LLM=fake für Entwicklung."
+    )
 
 
 LLMClientDep = Annotated[LLMClient, Depends(get_llm_client)]
