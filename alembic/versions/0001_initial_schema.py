@@ -15,37 +15,49 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade() -> None:
-    # ------------------------------------------------------------------ #
-    # Enums (idempotent — Existenz via pg_type prüfen, dann CREATE TYPE) #
-    # ------------------------------------------------------------------ #
-    _enums = [
-        ("source_type", "'law','guideline','expert_text','directory'"),
-        ("region_binding", "'region_independent','region_specific'"),
-        ("claim_version_status", "'draft','in_review','approved','published','superseded','withdrawn','expired'"),
-        ("evidence_role", "'carrying','supporting','contextual'"),
-        ("structured_value_kind", "'amount_eur','deadline_days','date','percentage','count','duration_months'"),
-        ("scope_dimension", "'region','target_group','topic'"),
-        ("claim_relation_kind", "'supersedes','requires','exception_to','applies_with','conflicts_with'"),
-        ("actor_role", "'author','editor','chief_editor','importer','regional_editor','org_admin','system_admin'"),
-        ("pathway_status", "'draft','in_review','approved','published','superseded','withdrawn'"),
-        ("decision_node_input_type", "'boolean','enum','text'"),
-    ]
-    conn = op.get_bind()
-    for type_name, labels in _enums:
-        exists = conn.execute(
-            sa.text("SELECT 1 FROM pg_type WHERE typname = :n"), {"n": type_name}
-        ).scalar()
-        if not exists:
-            conn.execute(sa.text(f"CREATE TYPE {type_name} AS ENUM ({labels})"))
+# ---------------------------------------------------------------------- #
+# Enum-Labels zentral. Die Types werden von SQLAlchemy beim ersten        #
+# CREATE TABLE genau einmal angelegt (jeder Type wird nur in einer        #
+# Tabelle verwendet). Kein manueller CREATE-TYPE-Pfad → keine doppelte    #
+# Anlage, keine DuplicateObjectError unter asyncpg.                       #
+# ---------------------------------------------------------------------- #
+_ENUM_LABELS: dict[str, tuple[str, ...]] = {
+    "source_type": ("law", "guideline", "expert_text", "directory"),
+    "region_binding": ("region_independent", "region_specific"),
+    "claim_version_status": (
+        "draft", "in_review", "approved", "published", "superseded", "withdrawn", "expired",
+    ),
+    "evidence_role": ("carrying", "supporting", "contextual"),
+    "structured_value_kind": (
+        "amount_eur", "deadline_days", "date", "percentage", "count", "duration_months",
+    ),
+    "scope_dimension": ("region", "target_group", "topic"),
+    "claim_relation_kind": (
+        "supersedes", "requires", "exception_to", "applies_with", "conflicts_with",
+    ),
+    "actor_role": (
+        "author", "editor", "chief_editor", "importer",
+        "regional_editor", "org_admin", "system_admin",
+    ),
+    "pathway_status": ("draft", "in_review", "approved", "published", "superseded", "withdrawn"),
+    "decision_node_input_type": ("boolean", "enum", "text"),
+}
 
+
+def _enum(name: str) -> sa.Enum:
+    """ENUM mit vollen Labels. create_type=True (Default): SQLAlchemy legt den
+    Type beim CREATE TABLE einmalig an. checkfirst verhindert Doppelanlage."""
+    return sa.Enum(*_ENUM_LABELS[name], name=name)
+
+
+def upgrade() -> None:
     # ------------------------------------------------------------------ #
     # Quell-Entitäten                                                      #
     # ------------------------------------------------------------------ #
     op.create_table(
         "source_document",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("type", sa.Enum(name="source_type", create_type=False), nullable=False),
+        sa.Column("type", _enum("source_type"), nullable=False),
         sa.Column("publisher", sa.String(500), nullable=False),
         sa.Column("canonical_ref", sa.String(1000), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
@@ -77,7 +89,7 @@ def upgrade() -> None:
         "claim",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("topic_scope", sa.String(200), nullable=False),
-        sa.Column("region_binding", sa.Enum(name="region_binding", create_type=False), nullable=False),
+        sa.Column("region_binding", _enum("region_binding"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
 
@@ -95,7 +107,7 @@ def upgrade() -> None:
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("life_situation_id", UUID(as_uuid=True), sa.ForeignKey("life_situation.id"), nullable=False),
         sa.Column("version", sa.Integer, nullable=False),
-        sa.Column("status", sa.Enum(name="pathway_status", create_type=False), nullable=False, server_default="draft"),
+        sa.Column("status", _enum("pathway_status"), nullable=False, server_default="draft"),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("locale", sa.String(10), nullable=False, server_default="de"),
         sa.Column("description", sa.Text, nullable=False, server_default=""),
@@ -106,7 +118,7 @@ def upgrade() -> None:
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("claim_id", UUID(as_uuid=True), sa.ForeignKey("claim.id"), nullable=False),
         sa.Column("statement_text", sa.Text, nullable=False),
-        sa.Column("status", sa.Enum(name="claim_version_status", create_type=False), nullable=False, server_default="draft"),
+        sa.Column("status", _enum("claim_version_status"), nullable=False, server_default="draft"),
         sa.Column("effective_from", sa.DateTime(timezone=True), nullable=True),
         sa.Column("effective_to", sa.DateTime(timezone=True), nullable=True),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
@@ -121,7 +133,7 @@ def upgrade() -> None:
         sa.Column("claim_version_id", UUID(as_uuid=True), sa.ForeignKey("claim_version.id"), nullable=True),
         sa.Column("pathway_id", UUID(as_uuid=True), sa.ForeignKey("life_situation_pathway.id"), nullable=True),
         sa.Column("actor_id", sa.String(200), nullable=False),
-        sa.Column("actor_role", sa.Enum(name="actor_role", create_type=False), nullable=False),
+        sa.Column("actor_role", _enum("actor_role"), nullable=False),
         sa.Column("action", sa.String(50), nullable=False),
         sa.Column("at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("four_eyes_of", sa.String(200), nullable=True),
@@ -132,7 +144,7 @@ def upgrade() -> None:
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("claim_version_id", UUID(as_uuid=True), sa.ForeignKey("claim_version.id"), nullable=False),
         sa.Column("source_passage_id", UUID(as_uuid=True), sa.ForeignKey("source_passage.id"), nullable=False),
-        sa.Column("role", sa.Enum(name="evidence_role", create_type=False), nullable=False),
+        sa.Column("role", _enum("evidence_role"), nullable=False),
         sa.Column("quote", sa.Text, nullable=False),
     )
 
@@ -140,7 +152,7 @@ def upgrade() -> None:
         "structured_value",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("claim_version_id", UUID(as_uuid=True), sa.ForeignKey("claim_version.id"), nullable=False),
-        sa.Column("kind", sa.Enum(name="structured_value_kind", create_type=False), nullable=False),
+        sa.Column("kind", _enum("structured_value_kind"), nullable=False),
         sa.Column("value", sa.String(500), nullable=False),
         sa.Column("unit", sa.String(100), nullable=True),
     )
@@ -149,7 +161,7 @@ def upgrade() -> None:
         "scope_assignment",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("claim_version_id", UUID(as_uuid=True), sa.ForeignKey("claim_version.id"), nullable=False),
-        sa.Column("dimension", sa.Enum(name="scope_dimension", create_type=False), nullable=False),
+        sa.Column("dimension", _enum("scope_dimension"), nullable=False),
         sa.Column("value", sa.String(500), nullable=False),
         sa.Column("applies", sa.Boolean, nullable=False, server_default="true"),
     )
@@ -159,7 +171,7 @@ def upgrade() -> None:
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("from_claim_version_id", UUID(as_uuid=True), sa.ForeignKey("claim_version.id"), nullable=False),
         sa.Column("to_claim_version_id", UUID(as_uuid=True), sa.ForeignKey("claim_version.id"), nullable=False),
-        sa.Column("kind", sa.Enum(name="claim_relation_kind", create_type=False), nullable=False),
+        sa.Column("kind", _enum("claim_relation_kind"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
 
@@ -171,7 +183,7 @@ def upgrade() -> None:
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("code", sa.String(100), nullable=False),
         sa.Column("question_template_de", sa.Text, nullable=False),
-        sa.Column("input_type", sa.Enum(name="decision_node_input_type", create_type=False), nullable=False),
+        sa.Column("input_type", _enum("decision_node_input_type"), nullable=False),
         sa.Column("options", JSONB, nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.UniqueConstraint("code"),
