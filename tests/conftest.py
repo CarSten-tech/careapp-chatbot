@@ -25,9 +25,11 @@ def pytest_collection_modifyitems(config, items):
         if item.get_closest_marker("llm"):
             item.add_marker(skip)
 
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL",
-    "postgresql+asyncpg://careapp:careapp_dev@localhost:5433/careapp_test",
+# Reihenfolge: explizite Test-DB > DATABASE_URL (CI setzt nur diese) > lokaler Default.
+TEST_DATABASE_URL = (
+    os.environ.get("TEST_DATABASE_URL")
+    or os.environ.get("DATABASE_URL")
+    or "postgresql+asyncpg://careapp:careapp_dev@localhost:5433/careapp_test"
 )
 
 
