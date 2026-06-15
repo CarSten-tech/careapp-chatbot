@@ -1,20 +1,21 @@
 """
-Echter End-to-End-Test mit AnthropicLLMClient (Welle 6e).
+Echter End-to-End-Test mit realem LLM-Client.
 
-Prüft die Sicherheitsinvarianten D1–D8 und T4/T7 gegen den realen Anthropic-Endpunkt.
+Unterstützt NVIDIA NIM (NVIDIA_API_KEY) und Anthropic (ANTHROPIC_API_KEY).
+Prüft die Sicherheitsinvarianten D1–D8 und T4/T7 gegen den realen LLM-Endpunkt.
 Die Fachaussagen stammen aus einer frisch angelegten CV in Supabase — keine Halluzination
 kann diesen Test passieren (Validator D8 schlägt zu).
 
-Marker `llm`: wird übersprungen wenn ANTHROPIC_API_KEY nicht gesetzt (conftest.py).
+Marker `llm`: wird übersprungen wenn weder NVIDIA_API_KEY noch ANTHROPIC_API_KEY gesetzt.
 Marker `db`:  benötigt Supabase-Verbindung (TEST_DATABASE_URL).
 
 Ausführen:
+    NVIDIA_API_KEY=nvapi-... uv run pytest tests/db/test_api_e2e.py -v -s
     ANTHROPIC_API_KEY=sk-ant-... uv run pytest tests/db/test_api_e2e.py -v -s
 """
 
 import pytest
-
-from careapp.llm.anthropic_adapter import AnthropicLLMClient
+from careapp.api.deps import get_llm_client
 from careapp.orchestration.graph import new_state, run_consultation
 from careapp.orchestration.state import AuthContext, Disposition
 
@@ -62,7 +63,7 @@ async def test_e2e_safety_invariants_hold_with_real_llm(db_clean):
       - Keine unsupported_claim_ids im Audit (D8 hat zugeschlagen oder Antwort ist safe)
     """
     cv, _pkg = await _seed_one_cv(db_clean)
-    llm = AnthropicLLMClient()
+    llm = get_llm_client()
 
     state = await run_consultation(
         new_state(
@@ -119,7 +120,7 @@ async def test_e2e_out_of_scope_message_yields_safe_response(db_clean):
     Der Validator darf nie medizinischen Rat durchlassen.
     """
     await _seed_one_cv(db_clean)
-    llm = AnthropicLLMClient()
+    llm = get_llm_client()
 
     state = await run_consultation(
         new_state(

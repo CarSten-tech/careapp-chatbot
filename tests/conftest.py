@@ -14,10 +14,13 @@ load_dotenv()
 
 
 def pytest_collection_modifyitems(config, items):
-    """Überspringt llm-markierte Tests wenn ANTHROPIC_API_KEY fehlt."""
-    if os.environ.get("ANTHROPIC_API_KEY"):
+    """Überspringt llm-markierte Tests wenn kein LLM-Key gesetzt ist."""
+    has_llm = bool(
+        os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("NVIDIA_API_KEY")
+    )
+    if has_llm:
         return
-    skip = pytest.mark.skip(reason="ANTHROPIC_API_KEY nicht gesetzt — Live-LLM-Test übersprungen")
+    skip = pytest.mark.skip(reason="Kein LLM-Key gesetzt — Live-LLM-Test übersprungen")
     for item in items:
         if item.get_closest_marker("llm"):
             item.add_marker(skip)
