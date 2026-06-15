@@ -19,18 +19,40 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
     # ------------------------------------------------------------------ #
-    # Enums                                                                #
+    # Enums (idempotent — DO-Block fängt duplicate_object ab)             #
     # ------------------------------------------------------------------ #
-    op.execute("CREATE TYPE source_type AS ENUM ('law','guideline','expert_text','directory');")
-    op.execute("CREATE TYPE region_binding AS ENUM ('region_independent','region_specific');")
-    op.execute("CREATE TYPE claim_version_status AS ENUM ('draft','in_review','approved','published','superseded','withdrawn','expired');")
-    op.execute("CREATE TYPE evidence_role AS ENUM ('carrying','supporting','contextual');")
-    op.execute("CREATE TYPE structured_value_kind AS ENUM ('amount_eur','deadline_days','date','percentage','count','duration_months');")
-    op.execute("CREATE TYPE scope_dimension AS ENUM ('region','target_group','topic');")
-    op.execute("CREATE TYPE claim_relation_kind AS ENUM ('supersedes','requires','exception_to','applies_with','conflicts_with');")
-    op.execute("CREATE TYPE actor_role AS ENUM ('author','editor','chief_editor','importer','regional_editor','org_admin','system_admin');")
-    op.execute("CREATE TYPE pathway_status AS ENUM ('draft','in_review','approved','published','superseded','withdrawn');")
-    op.execute("CREATE TYPE decision_node_input_type AS ENUM ('boolean','enum','text');")
+    op.execute("""
+DO $$ BEGIN
+    CREATE TYPE source_type AS ENUM ('law','guideline','expert_text','directory');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE region_binding AS ENUM ('region_independent','region_specific');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE claim_version_status AS ENUM ('draft','in_review','approved','published','superseded','withdrawn','expired');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE evidence_role AS ENUM ('carrying','supporting','contextual');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE structured_value_kind AS ENUM ('amount_eur','deadline_days','date','percentage','count','duration_months');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE scope_dimension AS ENUM ('region','target_group','topic');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE claim_relation_kind AS ENUM ('supersedes','requires','exception_to','applies_with','conflicts_with');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE actor_role AS ENUM ('author','editor','chief_editor','importer','regional_editor','org_admin','system_admin');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE pathway_status AS ENUM ('draft','in_review','approved','published','superseded','withdrawn');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+    CREATE TYPE decision_node_input_type AS ENUM ('boolean','enum','text');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+""")
 
     # ------------------------------------------------------------------ #
     # Quell-Entitäten                                                      #
