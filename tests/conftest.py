@@ -32,6 +32,33 @@ TEST_DATABASE_URL = (
     or "postgresql+asyncpg://careapp:careapp_dev@localhost:5433/careapp_test"
 )
 
+# Lokale Hosts, gegen die destruktive Tests (TRUNCATE in db_clean) laufen dürfen.
+_LOCAL_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "", None})
+
+
+def pytest_sessionstart(session) -> None:
+    """Sicherheits-Guard: Die db_clean-Fixture TRUNCATEt alle Tabellen. Läuft sie
+    versehentlich gegen eine entfernte (Produktions-)DB, gehen echte Daten verloren.
+    Darum: Test-Session hart abbrechen, wenn TEST_DATABASE_URL nicht auf einen
+    lokalen Host zeigt — außer explizitem Opt-in CAREAPP_ALLOW_PROD_TESTS=1.
+    """
+    if os.environ.get("CAREAPP_ALLOW_PROD_TESTS") == "1":
+        return
+    from sqlalchemy.engine import make_url
+
+    try:
+        host = make_url(TEST_DATABASE_URL).host
+    except Exception:  # nicht parsebar → konservativ blockieren
+        host = "<unparsable>"
+    if host not in _LOCAL_DB_HOSTS:
+        pytest.exit(
+            f"\n\nABBRUCH: TEST_DATABASE_URL zeigt auf einen nicht-lokalen Host "
+            f"('{host}'). Tests führen TRUNCATE aus und würden dort echte Daten "
+            f"löschen.\nNutze eine lokale Test-DB (z. B. localhost) oder setze "
+            f"bewusst CAREAPP_ALLOW_PROD_TESTS=1, wenn du das wirklich willst.\n",
+            returncode=2,
+        )
+
 
 @pytest.fixture
 async def engine():
