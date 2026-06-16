@@ -49,7 +49,7 @@ class LifeSituationPathway(Base):
     life_situation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("life_situation.id"), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[PathwayStatus] = mapped_column(
-        SAEnum(PathwayStatus, name="pathway_status"), nullable=False, default=PathwayStatus.draft
+        SAEnum(PathwayStatus, name="pathway_status", create_type=False), nullable=False, default=PathwayStatus.draft
     )
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     locale: Mapped[str] = mapped_column(String(10), nullable=False, default="de")
@@ -80,7 +80,7 @@ class DecisionNode(Base):
     code: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     question_template_de: Mapped[str] = mapped_column(Text, nullable=False)
     input_type: Mapped[DecisionNodeInputType] = mapped_column(
-        SAEnum(DecisionNodeInputType, name="decision_node_input_type"), nullable=False
+        SAEnum(DecisionNodeInputType, name="decision_node_input_type", create_type=False), nullable=False
     )
     options: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

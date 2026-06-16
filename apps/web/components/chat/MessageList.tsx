@@ -26,9 +26,7 @@ export default function MessageList({ messages, loading, onAnswer }: Props) {
       aria-atomic="false"
     >
       {messages.length === 0 && !loading && (
-        <div className="text-center text-gray-400 text-sm mt-8">
-          Stellen Sie Ihre erste Frage zur Pflegesituation.
-        </div>
+        <p className="text-sm text-gray-400 mt-8 text-center">Wie kann ich helfen?</p>
       )}
 
       {messages.map((msg) => (
@@ -37,11 +35,7 @@ export default function MessageList({ messages, loading, onAnswer }: Props) {
 
       {loading && (
         <div className="flex justify-start" aria-label="Antwort wird geladen">
-          <div className="flex gap-1 px-4 py-3 bg-gray-100 rounded-2xl rounded-tl-sm">
-            <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-            <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-            <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-          </div>
+          <p className="text-sm text-gray-400">…</p>
         </div>
       )}
 

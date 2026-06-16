@@ -28,15 +28,14 @@ export default function InputBar({ onSend, disabled = false }: Props) {
 
   function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setValue(e.target.value);
-    // Auto-Resize
     const el = e.target;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }
 
   return (
-    <div className="border-t border-gray-200 bg-white px-4 py-3">
-      <div className="flex items-end gap-2 max-w-3xl mx-auto">
+    <div className="border-t border-gray-200 px-4 py-3">
+      <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}
           value={value}
@@ -45,27 +44,20 @@ export default function InputBar({ onSend, disabled = false }: Props) {
           disabled={disabled}
           rows={1}
           maxLength={2000}
-          placeholder="Ihre Frage zur Pflegesituation …"
+          placeholder="Frage eingeben …"
           aria-label="Nachricht eingeben"
-          className="flex-1 resize-none rounded-xl border border-gray-300 px-3 py-2 text-sm
-                     focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-                     disabled:bg-gray-50 disabled:text-gray-400 leading-relaxed"
+          className="flex-1 resize-none border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-gray-400 disabled:bg-gray-50"
         />
         <button
           type="button"
           onClick={handleSubmit}
           disabled={disabled || !value.trim()}
           aria-label="Senden"
-          className="flex-shrink-0 rounded-xl bg-blue-600 text-white px-4 py-2 text-sm font-medium
-                     hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-                     disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
+          className="flex-shrink-0 border border-gray-300 rounded px-4 py-2 text-sm hover:bg-gray-50 disabled:text-gray-300 disabled:border-gray-200"
         >
           Senden
         </button>
       </div>
-      <p className="text-xs text-gray-400 text-center mt-1">
-        {value.length}/2000 Zeichen · Enter zum Senden, Shift+Enter für Zeilenumbruch
-      </p>
     </div>
   );
 }
