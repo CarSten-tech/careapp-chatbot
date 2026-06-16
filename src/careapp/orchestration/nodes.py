@@ -15,10 +15,11 @@ Pathways (ResolvePathway, Clarify-aus-PathwayStep) und LLM-4-Retrieval-Terms sin
 Milestone 4.2.
 """
 
+import dataclasses
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional
 
-from sqlalchemy import select
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.orm import selectinload
 
 from careapp.db.models.pathway import (
@@ -31,6 +32,7 @@ from careapp.domain.coverage import ASPECT_MAP, CoverageGrade, compute_coverage
 from careapp.domain.eligibility import RequestContext
 from careapp.llm.channels import ThreeChannelPrompt
 from careapp.llm.composer import compose_grounded_response
+from careapp.llm.embeddings import embedding_to_pgvector
 from careapp.llm.fallback import fallback_composer_response
 from careapp.llm.port import LLMCallAudit, LLMRequest, LLMTouchpoint
 from careapp.llm.schemas import (
@@ -81,9 +83,60 @@ NodeFn = Callable[[ConsultationState, ToolContext, GraphConfig], Awaitable[str]]
 
 # Pilot-Default-Prompts. Der echte, versionierte Prompt-Satz (prompt_set_version)
 # ist eine redaktionelle Aufgabe; hier nur knappe, sichere Platzhalter.
-_SAFETY_RULES = "Klassifiziere Scope und Sicherheit. Nur enumerierte Labels, kein Freitext, kein Fachwissen."
-_INTENT_RULES = "Überführe die Eingabe in eine schemavalidierte Interpretation. Keine Fachantwort; keine Hypothese als Fakt."
-_CLARIFY_RULES = "Formuliere eine kleine Rückfrage zu genau den fehlenden Daten. Keine versteckte fachliche Voraussetzung."
+
+# Domänen-Anker (gegen generisches Abdriften / Halluzination): jeder Touchpoint
+# bleibt strikt in der Pflegeberatung. Themen außerhalb sind nicht Teil der Beratung.
+_DOMAIN_ANCHOR = (
+    "Kontext: Dies ist eine Pflegeberatung nach deutschem Sozialrecht (SGB XI — "
+    "Pflegeversicherung, Pflegegrade, Pflegeleistungen, häusliche und stationäre "
+    "Pflege). Bleibe AUSSCHLIESSLICH in dieser Domäne. Themen außerhalb der Pflege "
+    "(z. B. Miet-, Steuer-, Arbeits- oder allgemeines Recht) gehören NICHT zu dieser "
+    "Beratung und dürfen weder vorgeschlagen noch als Option angeboten werden."
+)
+
+_SAFETY_RULES = (
+    f"{_DOMAIN_ANCHOR}\n"
+    "Klassifiziere Scope und Sicherheit. Nur enumerierte Labels, kein Freitext, kein Fachwissen.\n"
+    "requires_individual_eligibility_decision=true NUR, wenn eine verbindliche "
+    "Einzelfall-Entscheidung über den konkreten Anspruch einer Person verlangt wird "
+    "(z. B. 'Habe ich Anspruch auf Pflegegrad 3?', 'Bekomme ich 1800 € im Monat?', "
+    "'Steht meiner Mutter vollstationäre Pflege zu?'). "
+    "Allgemeine oder prozedurale Fragen sind KEINE Einzelfall-Entscheidung und damit "
+    "false (z. B. 'Meine Mutter muss ins Heim, was muss ich tun?', 'Welche Leistungen "
+    "gibt es bei stationärer Pflege?', 'Welche Pflegegrade gibt es?', 'Wie läuft eine "
+    "Heimunterbringung ab?'). Im Zweifel zwischen allgemein und Einzelfall: allgemein (false)."
+)
+_CLARIFY_RULES = (
+    f"{_DOMAIN_ANCHOR}\n"
+    "Formuliere eine kurze Rückfrage zu genau den fehlenden, fachlich nötigen Angaben "
+    "INNERHALB der Pflegeberatung. Biete niemals Themen oder Antwortoptionen außerhalb "
+    "der Pflege an. Keine versteckte fachliche Voraussetzung."
+)
+
+
+def _intent_rules(cfg: GraphConfig) -> str:
+    """Intent-Prompt mit redaktionellem Vokabular (ASPECT_MAP-Schlüssel als
+    einzige Quelle der Wahrheit). Das LLM ordnet auch umgangssprachliche Eingaben
+    einem bekannten Anliegen-Code zu — die autoritative Auswahl bleibt serverseitig."""
+    amap = cfg.aspect_map if cfg.aspect_map is not None else ASPECT_MAP
+    codes = ", ".join(sorted(amap.keys())) or "(keine)"
+    return (
+        f"{_DOMAIN_ANCHOR}\n"
+        "Überführe die Eingabe in eine schemavalidierte Interpretation. "
+        "Keine Fachantwort; keine Hypothese als Fakt.\n"
+        f"Bekannte Anliegen-Codes (intent_hypotheses): [{codes}]. "
+        "Ordne das Anliegen des Nutzers — auch bei ungenauer, umgangssprachlicher oder "
+        "nur sinngemäßer Formulierung — dem passenden Code zu und nimm ihn in "
+        "intent_hypotheses auf. Beispiel: 'Meine Mutter muss ins Heim', 'Oma kommt ins "
+        "Pflegeheim', 'wir brauchen einen Heimplatz' → 'heimunterbringung'. "
+        "Wenn das Anliegen klar einem Code entspricht und keine zwingend nötige Angabe "
+        "fehlt, setze missing_information=[] und recommended_next_action=proceed_to_retrieval. "
+        "Demografische Angaben (Alter, Wohnort, konkrete Person, Bundesland) sind für "
+        "allgemeine Informationsfragen NICHT erforderlich — behandle sie nicht als "
+        "fehlend. missing_information nur füllen, wenn die Angabe fachlich zwingend "
+        "nötig ist, um überhaupt eine geprüfte Aussage zuzuordnen. "
+        "Erfinde keine Codes außerhalb der genannten Liste."
+    )
 
 SAFE_SCOPE_TEXT = "Dazu kann ich im Rahmen dieser Beratung nichts Geprüftes beitragen."
 
@@ -228,7 +281,7 @@ async def safety_check(state: ConsultationState, tools: ToolContext, cfg: GraphC
 
 async def understand_concern(state: ConsultationState, tools: ToolContext, cfg: GraphConfig) -> str:
     result = tools.llm().complete_structured(
-        _llm_request(state, cfg, LLMTouchpoint.intent, _INTENT_RULES, IntentUnderstanding)
+        _llm_request(state, cfg, LLMTouchpoint.intent, _intent_rules(cfg), IntentUnderstanding)
     )
     state.llm_audits.append(result.audit)
     if not (result.ok and isinstance(result.parsed, IntentUnderstanding)):
@@ -377,6 +430,40 @@ async def clarify(state: ConsultationState, tools: ToolContext, cfg: GraphConfig
     return SUMMARY  # Turn endet mit Rückfrage; Nutzerantwort startet den nächsten Turn
 
 
+async def _semantic_rank_package(session, embedder, query: str, package, top_k: int):
+    """Semantischer Recall NACH den Eligibility-Filtern: rangiert die bereits
+    erlaubten Evidence-Items nach Nähe zur Frage und behält die top_k.
+
+    Sicherheits-Invarianten:
+    - reduziert NUR `items` (was der Composer sieht) — `eligible_ids` (die
+      Erlaubnis-Menge des Validators) bleibt unverändert.
+    - erlaubte Claims OHNE Embedding werden NIE verworfen (nur ans Ende sortiert).
+    - jeder Fehler im Recall lässt das Package unverändert (fail-open NUR auf der
+      Recall-Seite — die Erlaubnis bleibt fail-closed).
+    """
+    items = package.items
+    if embedder is None or len(items) <= top_k:
+        return package
+    all_ids = [it.claim_version_id for it in items]
+    try:
+        qvec = embedding_to_pgvector(embedder.embed_query(query))
+        stmt = text(
+            "SELECT id FROM claim_version "
+            "WHERE id IN :ids AND embedding IS NOT NULL "
+            "ORDER BY embedding <=> (:q)::vector"
+        ).bindparams(bindparam("ids", expanding=True))
+        rows = (await session.execute(stmt, {"ids": all_ids, "q": qvec})).all()
+    except Exception:  # noqa: BLE001 — Recall-Problem darf die Antwort nicht verhindern
+        return package
+    embedded_ranked = [r[0] for r in rows]
+    if not embedded_ranked:
+        return package
+    embedded_set = set(embedded_ranked)
+    kept = embedded_ranked[:top_k] + [i for i in all_ids if i not in embedded_set]
+    by_id = {it.claim_version_id: it for it in items}
+    return dataclasses.replace(package, items=tuple(by_id[i] for i in kept if i in by_id))
+
+
 async def evaluate_coverage(state: ConsultationState, tools: ToolContext, cfg: GraphConfig) -> str:
     session = tools.db()
     ctx_base = _request_context(state, topic_scope=state.resolved_intent or "")
@@ -394,7 +481,13 @@ async def evaluate_coverage(state: ConsultationState, tools: ToolContext, cfg: G
     # Pilot: ein Aspekt je Intent → genau ein abgedecktes Package wählen.
     # (Multi-Aspekt-Komposition mit getrenntem topic_scope je Aussage = Milestone 4.2.)
     aspect = sorted(result.covered_aspects)[0]
-    state.evidence_package = result.packages[aspect]
+    package = result.packages[aspect]
+    # Semantischer Recall: erlaubte Claims nach Frage-Nähe rangieren, top_k behalten.
+    # Coverage-Entscheidung ist hier bereits gefallen und bleibt davon unberührt.
+    package = await _semantic_rank_package(
+        session, tools.embedder(), state.latest_user_message, package, cfg.retrieval_top_k
+    )
+    state.evidence_package = package
     state.compose_topic_scope = aspect
     return COMPOSE
 
@@ -498,7 +591,7 @@ NODE_ALLOWLIST: dict[str, frozenset[Tool]] = {
     RESOLVE: frozenset({Tool.db_read}),
     CLARIFY: frozenset({Tool.llm}),
     BUILD_RETRIEVAL: frozenset(),
-    COVERAGE: frozenset({Tool.db_read}),
+    COVERAGE: frozenset({Tool.db_read, Tool.embed}),
     COMPOSE: frozenset({Tool.llm, Tool.db_read}),
     PRESENT: frozenset({Tool.audit_write}),
     NO_VERIFIED: frozenset(),
