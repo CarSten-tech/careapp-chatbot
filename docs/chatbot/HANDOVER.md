@@ -1,7 +1,7 @@
 # CareApp Chatbot – Übergabepunkt
 
 **Zweck:** Jederzeit kalt übernehmbarer Stand der Architekturplanung. Wird nach
-jedem Meilenstein aktualisiert. Letzter Stand: **2026-06-16 (Hybrid-Retrieval live: pgvector-Embeddings (NIM) + semantischer Recall hinter den Eligibility-Filtern, auf `main` gemerged (PR #1+#2), CI grün. Anti-Halluzinations-Prompts + Test-DB-Guard.)**.
+jedem Meilenstein aktualisiert. Letzter Stand: **2026-06-16 (Hybrid-Retrieval live (PR #1+#2) + prozedurale Schritt-Claims (PR #4, Stage A). 11 publizierte Claims, eingebettet. Nächstes Arbeitspaket vollständig spezifiziert: geführter Pathway inkl. fehlender Antwort-Erfassungs-Schicht — siehe Abschnitt am Dateiende.)**.
 
 ## Was geplant wird
 
@@ -801,3 +801,105 @@ einmal). **Lokale Test-DB ist jetzt getrennt** (Homebrew-Postgres `careapp_test`
 - **Enterprise-Datenschutz:** NIM-Embeddings sind US-gehostet. Für Produktion EU-/on-prem-Modell.
 - **Content-Lücke:** Es fehlen prozedurale Claims + ein publizierter Pathway für „Heimunterbringung",
   damit „was muss ich tun?" echte Handlungsschritte liefert (nicht nur beschreibende Aussagen).
+
+---
+
+## Prozedurale Schritt-Claims fertig (2026-06-16, Stage A)
+
+Drei SGB-XI-belegte **prozedurale** ClaimVersions geseedet (PR #4), damit „was muss ich tun?"
+echte Handlungsschritte liefert statt nur Definitionen. **Bereits in Supabase + eingebettet,
+jetzt 11 publizierte Claims.** Pilot/Demo-Inhalt, markiert für Fachredaktions-Review.
+
+| id_seed | Aussage (kurz) | Quelle | Passage-Key |
+|---|---|---|---|
+| `cv-schritt-antrag-pflegekasse` | Erster Schritt: Antrag bei der Pflegekasse | § 33 Abs. 1 SGB XI | `§33-abs1` |
+| `cv-schritt-md-begutachtung` | MD-Begutachtung stellt Pflegegrad fest | § 18 Abs. 1 SGB XI | `§18-abs1` |
+| `cv-schritt-zugelassene-einrichtung` | Nur zugelassene Einrichtungen (Versorgungsvertrag) | § 72 Abs. 1 SGB XI | `§72-abs1` |
+
+Verifiziert: „Meine Mutter muss ins Heim, was muss ich machen?" liefert jetzt Antrag +
+MD-Begutachtung + Anspruch unter den Top-5 (semantisches Ranking).
+
+---
+
+## NÄCHSTES ARBEITSPAKET: Geführter Pathway (voll bauen, kalt startbar)
+
+**Ziel:** „Heimunterbringung" wird ein geführter Dialog: Der Bot fragt „Liegt bereits ein
+Pflegegrad vor?" und zeigt je nach Antwort die *passenden* Claims (Antragsweg vs. Leistungen)
+statt alles zu dumpen.
+
+### KRITISCHER BEFUND (Grund, warum das ein eigenes Paket ist)
+Die Pathway-Engine (`resolve_pathway`, `_next_open_step` in `nodes.py`) existiert und ist
+unit-getestet (`tests/db/test_pathway.py`) — **aber nur mit vorab gesetzten Antworten**. Es gibt
+**keine Schicht, die die Nutzer-Antwort aus der Nachricht in `state.pathway_answers` schreibt.**
+`ChatRequest` hat nur `message`+`session_id`; nirgends wird `pathway_answers[node.code] = value`
+aus User-Input gesetzt. **Ohne diese Schicht fragt ein Live-Pathway ewig dieselbe Frage.**
+Diese Schicht ist das Herzstück des Pakets.
+
+### Teil 1 — Antwort-Erfassungs-Schicht (Kern-Orchestrierung)
+- **Idee:** Zu Beginn eines Turns mit aktivem Pathway: den aktuell offenen Step deterministisch
+  aus den bestehenden `pathway_answers` re-resolven (= die Frage, die der Nutzer gerade
+  beantwortet). Die `latest_user_message` per LLM auf einen erlaubten `answer_value` des
+  `decision_node` mappen (Optionen aus `decision_node.options` bzw. den `PathwayBranch.answer_value`s),
+  dann `state.pathway_answers[node.code] = value` setzen (wird via Checkpoint persistiert).
+- **Neuer LLM-Touchpoint** `LLMTouchpoint.pathway_answer`: Schema = enumerierter `answer_value`
+  (strict, nur aus erlaubten Optionen). Drei-Kanal: system_rules = „mappe Antwort auf genau eine
+  Option", `user_input` = Nachricht, Daten = Frage + erlaubte Optionen. Bei Mehrdeutigkeit/keinem
+  Treffer → Frage erneut stellen (kein Rateschluss).
+- **Wo einhängen:** neuer Node nach CONSENT, vor RESOLVE — nur aktiv, wenn ein Pathway aktiv ist
+  und ein offener Step existiert. Allowlist `{llm, db_read, auth_read}`. Edge in `ALLOWED_EDGES`
+  + `NODE_FNS` + `NODE_ALLOWLIST` ergänzen.
+- **Checkpoint:** `pathway_answers` wird bereits persistiert (`checkpoint.py`). Prüfen, ob
+  `active_pathway_id`/`current_step_id` persistiert werden müssen — vermutlich nicht, da pro Turn
+  aus `pathway_answers` neu resolved wird (Empfehlung: re-resolven, kein zusätzlicher State).
+- **Tests:** Erweiterung `tests/db/test_pathway.py` — statt `pathway_answers` direkt zu setzen,
+  über die neue Schicht (FakeLLM, der „ja"→"true" mappt) den Mehr-Turn-Flow durchspielen.
+
+### Teil 2 — Content-Split (ZWINGEND mit Pathway gekoppelt)
+- **Warum gekoppelt:** Die Orchestrierung komponiert nur EINEN Aspekt
+  (`evaluate_coverage`: `aspect = sorted(result.covered_aspects)[0]`). Splittet man den Content
+  in 2 Aspekte OHNE Pathway, zeigt der freie Pfad nur den alphabetisch ersten Aspekt
+  (`antragsverfahren`) → freier Pfad degradiert. Der Pathway wählt den Aspekt über
+  `PathwayBranch.retrieval_scope_modifier` → `retrieval_topic_focus` → `coverage_aspect_override`.
+  (Alternative, größer: Multi-Aspekt-Komposition implementieren.)
+- **Re-Tagging:** Topic wird über `ScopeAssignment(dimension=topic).value` gematcht (Gate 7 in
+  `eligibility.py`), NICHT über `Claim.topic_scope`. Aktuell ist beides hart `"stationaere_pflege"`
+  (`seed_pilot_cvs.py` Z. ~472 + ~507).
+  - Aspekt `antragsverfahren`: `cv-pflegebeduerftigkeit-definition`, `cv-pflegegrade-uebersicht`,
+    `cv-schritt-antrag-pflegekasse`, `cv-schritt-md-begutachtung`
+  - Aspekt `stationaere_leistungen`: `cv-vollstationaere-pflege-anspruch`,
+    `cv-vollstationaere-pflegekassenbetrag-pg2..5`, `cv-betreuungsangebote-stationaer`,
+    `cv-schritt-zugelassene-einrichtung`
+  - Umsetzung: `"topic"`-Feld je `CV_DEF` ergänzen; Z. 472/507 auf `cv_def["topic"]` umstellen.
+    Bestehende Prod-Rows: Seed überspringt vorhandene CVs → `--retag`-Modus in den Seed bauen, der
+    `ScopeAssignment(topic).value` + `Claim.topic_scope` für vorhandene CVs **non-destruktiv**
+    updatet (erhält Embeddings — kein erneuter Backfill nötig).
+- **`ASPECT_MAP`** (`domain/coverage.py`): `"heimunterbringung": ["antragsverfahren", "stationaere_leistungen"]`.
+
+### Teil 3 — Pathway-Daten seeden (`scripts/seed_pilot_pathway.py`, neu, idempotent, deterministische UUIDs)
+- `LifeSituation(code="heimunterbringung", label_de="Heimunterbringung (stationäre Pflege)")`.
+- `LifeSituationPathway(status=published, version=1, locale="de")` + Approval-Rows (Vier-Augen:
+  importer + chief_editor) — **Achtung:** Pathway-Publish-Trigger aus Migration 0002 prüfen
+  (Voraussetzungen analog ClaimVersion).
+- `DecisionNode(code="pflegegrad_vorhanden", input_type=boolean,
+  question_template_de="Liegt für die betroffene Person bereits ein anerkannter Pflegegrad vor?",
+  options=[{value:"true",label:"Ja"},{value:"false",label:"Nein"}])`.
+- `PathwayStep(step_order=1, decision_node=pflegegrad_vorhanden, is_required=true)`.
+- `PathwayBranch`es:
+  - `answer_value="false"` → `next_step_id=None`, `retrieval_scope_modifier={"topic_scope":"antragsverfahren"}`
+  - `answer_value="true"`  → `next_step_id=None`, `retrieval_scope_modifier={"topic_scope":"stationaere_leistungen"}`
+
+### Teil 4 — Verifikation
+- „Meine Mutter muss ins Heim" → Frage „Liegt ein Pflegegrad vor?".
+- Antwort „nein" (gleiche Session via `session_id`) → Antragsweg-Claims (Antrag, MD-Begutachtung).
+- Antwort „ja" → Leistungs-Claims (Anspruch, Beträge, Betreuung).
+- `tests/db/test_pathway.py` + Golden Set grün (keine Regression).
+
+### Offene Design-Entscheidungen für die neue Session
+- Freier-Pfad-Verhalten, solange keine Pathway-Antwort vorliegt: Default-Aspekt `antragsverfahren`
+  („Erste-Schritte") ODER zuerst die Pathway-Frage stellen.
+- Umgang mit mehrdeutiger/unmappbarer Antwort (erneut fragen vs. Fallback).
+- Single-Aspekt + Pathway (empfohlen, kleiner) vs. Multi-Aspekt-Komposition (größer, robuster).
+
+### Empfohlene Modellnutzung für dieses Paket
+Kern-Orchestrierung (Antwort-Erfassungs-Schicht) mit **Opus 4.8 (hoch)**; Seeds/Tests mit
+**Sonnet 4.6 (mittel)**. Vorab `git pull` (PR #4 sollte gemerged sein → 11 Claims als Basis).
