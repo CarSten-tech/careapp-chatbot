@@ -136,6 +136,33 @@ PASSAGES = [
             "und Aktivierungsangebote)."
         ),
     },
+    {
+        "key": "§33-abs1",
+        "anchor": {"paragraph": "§ 33 Abs. 1 SGB XI"},
+        "text": (
+            "Die Leistungen der Pflegeversicherung werden auf Antrag gewährt. Wird der "
+            "Antrag im Laufe eines Kalendermonats gestellt, so werden die Leistungen von "
+            "Beginn des Monats an gewährt."
+        ),
+    },
+    {
+        "key": "§18-abs1",
+        "anchor": {"paragraph": "§ 18 Abs. 1 SGB XI"},
+        "text": (
+            "Die Pflegekassen haben durch den Medizinischen Dienst oder durch andere "
+            "unabhängige Gutachter prüfen zu lassen, ob die Voraussetzungen der "
+            "Pflegebedürftigkeit erfüllt sind und welcher Pflegegrad vorliegt."
+        ),
+    },
+    {
+        "key": "§72-abs1",
+        "anchor": {"paragraph": "§ 72 Abs. 1 SGB XI"},
+        "text": (
+            "Die Pflegekassen dürfen ambulante und stationäre Pflege nur durch "
+            "Pflegeeinrichtungen gewähren, mit denen ein Versorgungsvertrag besteht "
+            "(zugelassene Pflegeeinrichtungen)."
+        ),
+    },
 ]
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -277,6 +304,61 @@ CV_DEFS = [
             "Pflegebedürftige in stationären Pflegeeinrichtungen haben Anspruch auf "
             "zusätzliche Betreuung und Aktivierung, die über die nach Art und Schwere der "
             "Pflegebedürftigkeit notwendige Versorgung hinausgeht."
+        ),
+        "structured_values": [],
+    },
+    # ── Prozedurale Schritt-Claims (Pilot/Review) — was muss ich konkret tun? ──
+    {
+        "id_seed": "cv-schritt-antrag-pflegekasse",
+        "statement_text": (
+            "Der erste Schritt ist ein Antrag auf Leistungen der Pflegeversicherung bei "
+            "der zuständigen Pflegekasse. Leistungen werden nur auf Antrag gewährt und ab "
+            "Beginn des Antragsmonats."
+        ),
+        "region_binding": RegionBinding.region_independent,
+        "scope_region": "DE_FEDERAL",
+        "scope_target_groups": ("relative", "patient"),
+        "evidence_passage_key": "§33-abs1",
+        "evidence_quote": (
+            "Die Leistungen der Pflegeversicherung werden auf Antrag gewährt. Wird der "
+            "Antrag im Laufe eines Kalendermonats gestellt, so werden die Leistungen von "
+            "Beginn des Monats an gewährt."
+        ),
+        "structured_values": [],
+    },
+    {
+        "id_seed": "cv-schritt-md-begutachtung",
+        "statement_text": (
+            "Nach dem Antrag beauftragt die Pflegekasse den Medizinischen Dienst mit einer "
+            "Begutachtung, die feststellt, ob Pflegebedürftigkeit vorliegt und welcher "
+            "Pflegegrad zutrifft."
+        ),
+        "region_binding": RegionBinding.region_independent,
+        "scope_region": "DE_FEDERAL",
+        "scope_target_groups": ("relative", "patient"),
+        "evidence_passage_key": "§18-abs1",
+        "evidence_quote": (
+            "Die Pflegekassen haben durch den Medizinischen Dienst oder durch andere "
+            "unabhängige Gutachter prüfen zu lassen, ob die Voraussetzungen der "
+            "Pflegebedürftigkeit erfüllt sind und welcher Pflegegrad vorliegt."
+        ),
+        "structured_values": [],
+    },
+    {
+        "id_seed": "cv-schritt-zugelassene-einrichtung",
+        "statement_text": (
+            "Vollstationäre Pflege kann nur in zugelassenen Pflegeeinrichtungen in "
+            "Anspruch genommen werden, mit denen die Pflegekasse einen Versorgungsvertrag "
+            "geschlossen hat."
+        ),
+        "region_binding": RegionBinding.region_independent,
+        "scope_region": "DE_FEDERAL",
+        "scope_target_groups": ("relative", "patient"),
+        "evidence_passage_key": "§72-abs1",
+        "evidence_quote": (
+            "Die Pflegekassen dürfen ambulante und stationäre Pflege nur durch "
+            "Pflegeeinrichtungen gewähren, mit denen ein Versorgungsvertrag besteht "
+            "(zugelassene Pflegeeinrichtungen)."
         ),
         "structured_values": [],
     },
