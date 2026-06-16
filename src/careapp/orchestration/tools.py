@@ -21,6 +21,7 @@ class Tool(str, Enum):
 
     auth_read = "auth_read"                    # Auth-/Consent-Kontext lesen
     llm = "llm"                                # schema-erzwungener LLM-Port
+    embed = "embed"                            # Embedding-Port (semantischer Recall)
     db_read = "db_read"                        # lesende Domain-Queries (Evidence/Coverage/Validator)
     safety_notice_lookup = "safety_notice_lookup"  # freigegebene safety_notice-Bausteine
     audit_write = "audit_write"                # Trace/Audit schreiben
@@ -42,6 +43,7 @@ class ToolContext:
     allowed: frozenset[Tool]
     _session: AsyncSession
     _llm: LLMClient
+    _embedder: object | None = None
     used: set[Tool] = field(default_factory=set)
 
     def _require(self, tool: Tool) -> None:
@@ -55,6 +57,12 @@ class ToolContext:
     def llm(self) -> LLMClient:
         self._require(Tool.llm)
         return self._llm
+
+    def embedder(self) -> object | None:
+        """Embedding-Port für den semantischen Recall. None → semantik deaktiviert
+        (graceful: das Retrieval fällt auf das bisherige Verhalten zurück)."""
+        self._require(Tool.embed)
+        return self._embedder
 
     def db(self) -> AsyncSession:
         self._require(Tool.db_read)

@@ -113,6 +113,7 @@ class GraphConfig:
     budget: LLMCallBudget = field(default_factory=_default_budget)
     policy: ScopePolicy = field(default_factory=ScopePolicy)
     aspect_map: Optional[dict[str, list[str]]] = None  # None → Produktions-ASPECT_MAP
+    retrieval_top_k: int = 5  # semantischer Recall: max. Claims je Aspekt fürs Komponieren
 
     @property
     def versions(self) -> GraphVersionTriple:

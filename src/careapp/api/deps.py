@@ -110,6 +110,26 @@ def get_llm_client() -> LLMClient:
 
 LLMClientDep = Annotated[LLMClient, Depends(get_llm_client)]
 
+
+def get_embedder() -> object | None:
+    """Embedding-Client für den semantischen Recall. None → Semantik deaktiviert
+    (das Retrieval fällt graceful auf das bisherige Verhalten zurück).
+    NVIDIA NIM, gleicher Key wie das LLM."""
+    if not os.environ.get("NVIDIA_API_KEY"):
+        return None
+    try:
+        from careapp.llm.embeddings import NIMEmbeddingClient
+    except ImportError:
+        return None
+    return NIMEmbeddingClient(
+        api_key=os.environ["NVIDIA_API_KEY"],
+        base_url=os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+        model=os.environ.get("NVIDIA_EMBED_MODEL", "nvidia/nv-embedqa-e5-v5"),
+    )
+
+
+EmbedderDep = Annotated[object | None, Depends(get_embedder)]
+
 # ------------------------------------------------------------------ #
 # Checkpoint Store                                                    #
 # ------------------------------------------------------------------ #

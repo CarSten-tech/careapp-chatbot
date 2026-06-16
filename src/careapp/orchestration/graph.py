@@ -131,6 +131,7 @@ async def run_consultation(
     *,
     session: AsyncSession,
     llm: LLMClient,
+    embedder: object | None = None,
     config: Optional[GraphConfig] = None,
 ) -> ConsultationState:
     """
@@ -143,7 +144,7 @@ async def run_consultation(
     current = SESSION_START
 
     for _ in range(state.budgets.max_graph_steps):
-        tools = ToolContext(current, NODE_ALLOWLIST[current], session, llm)
+        tools = ToolContext(current, NODE_ALLOWLIST[current], session, llm, embedder)
         try:
             nxt = await NODE_FNS[current](state, tools, cfg)
         except Exception as exc:  # noqa: BLE001 — jeder Node-Fehler → fail-closed (§7)

@@ -18,7 +18,13 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from careapp.api.auth import AuthContextDep
-from careapp.api.deps import CheckpointStoreDep, DbSession, GraphConfigDep, LLMClientDep
+from careapp.api.deps import (
+    CheckpointStoreDep,
+    DbSession,
+    EmbedderDep,
+    GraphConfigDep,
+    LLMClientDep,
+)
 from careapp.api.models import (
     ChatRequest,
     ChatResponse,
@@ -76,6 +82,7 @@ async def chat(
     auth: AuthContextDep,
     session: DbSession,
     llm: LLMClientDep,
+    embedder: EmbedderDep,
     store: CheckpointStoreDep,
     cfg: GraphConfigDep,
 ) -> ChatResponse:
@@ -104,7 +111,9 @@ async def chat(
     )
 
     # Kern ausführen (immer fail-closed — wirft nie durch)
-    state_out = await run_consultation(state, session=session, llm=llm, config=cfg)
+    state_out = await run_consultation(
+        state, session=session, llm=llm, embedder=embedder, config=cfg
+    )
 
     # Checkpoint persistieren
     await store.save(extract_checkpoint(state_out, cfg))
