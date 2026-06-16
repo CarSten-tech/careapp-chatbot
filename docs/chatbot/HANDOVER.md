@@ -1,7 +1,7 @@
 # CareApp Chatbot – Übergabepunkt
 
 **Zweck:** Jederzeit kalt übernehmbarer Stand der Architekturplanung. Wird nach
-jedem Meilenstein aktualisiert. Letzter Stand: **2026-06-14 (Admin-Backend Welle 6d fertig: 14 FastAPI-Endpunkte + 11 Next.js-Admin-Seiten + Vier-Augen-Workflow. Build grün.)**.
+jedem Meilenstein aktualisiert. Letzter Stand: **2026-06-16 (Hybrid-Retrieval live: pgvector-Embeddings (NIM) + semantischer Recall hinter den Eligibility-Filtern, auf `main` gemerged (PR #1+#2), CI grün. Anti-Halluzinations-Prompts + Test-DB-Guard.)**.
 
 ## Was geplant wird
 
@@ -746,3 +746,58 @@ Daher zur Laufzeit günstig:
 
 Empfohlene Modellnutzung beim Weiterplanen: Threat-Design mit **Opus 4.8 (hoch/max)**;
 Ausformulierung Tests/Schemas mit **Sonnet 4.6 (mittel)**.
+
+---
+
+## Hybrid-Retrieval — semantischer Recall fertig (2026-06-16)
+
+Semantische Suche (Embeddings) ist live im Chat und auf `main` gemerged. Eingeführt
+in zwei PRs: **PR #1** (OpenAI-compat-Adapter-Fix) und **PR #2** (Hybrid-Retrieval),
+beide CI-grün auf `main` (`cbac110`, `7181a4a`).
+
+### Kern-Invariante
+**Embeddings beeinflussen nur den Recall, nie die Erlaubnis.** Der semantische Schritt
+sitzt in `evaluate_coverage` **nach** den deterministischen Eligibility-Filtern und
+rangiert die bereits erlaubten Claims nach Frage-Nähe (`GraphConfig.retrieval_top_k`,
+Default 5). Reduziert wird NUR `EvidencePackage.items` (Composer-Sicht); `eligible_ids`
+(Validator-Erlaubnis) bleibt voll → Grounding unverändert. Claims ohne Embedding werden
+nie verworfen. Ohne Embedder = bisheriges Verhalten (graceful).
+
+### Implementierte Dateien
+- `alembic/versions/0005_claim_version_embedding.py` — `embedding vector(1024)` auf
+  `claim_version` + HNSW-Cosine-Index. **Bereits auf Supabase angewendet.**
+- `src/careapp/llm/embeddings.py` — `NIMEmbeddingClient` (`nvidia/nv-embedqa-e5-v5`,
+  1024 Dim, query/passage `input_type`) + `embedding_to_pgvector`.
+- `scripts/backfill_embeddings.py` — bettet alle published Claims ein (idempotent).
+  **Bereits gelaufen: alle 8 Pilot-CVs sind eingebettet.**
+- `scripts/semantic_search_demo.py` — zeigt das semantische Ranking gegen die Live-DB.
+- Verdrahtung: `Tool.embed` + `_embedder` in `tools.py`, durch `run_consultation`
+  (`graph.py`), `deps.get_embedder`, `chat.py`-Router. `retrieval_top_k` in `state.py`.
+
+### Prompt-Härtung (`nodes.py`)
+- `_DOMAIN_ANCHOR` in allen drei Steuer-Prompts → kein generisches Abdriften (vorher
+  schlug die Klärungsfrage z. B. Mietrecht/Steuerrecht vor).
+- `_intent_rules(cfg)` injiziert die `ASPECT_MAP`-Schlüssel als Vokabular → robuste
+  Fuzzy-Zuordnung umgangssprachlicher Eingaben („Mutter muss ins Heim" → `heimunterbringung`).
+- `_SAFETY_RULES` lehrt die Unterscheidung prozedural vs. individuelle Anspruchsentscheidung
+  (sonst wurde „was muss ich tun?" fälschlich als Einzelfall geblockt).
+
+### Test-DB-Sicherheit (`tests/conftest.py`)
+`pytest_sessionstart`-Guard: bricht ab, wenn `TEST_DATABASE_URL` nicht lokal ist (außer
+`CAREAPP_ALLOW_PROD_TESTS=1`). Hintergrund: die `db_clean`-Fixtures TRUNCATEn alle Tabellen;
+lief das versehentlich gegen die Supabase-Prod-DB, gingen Daten verloren (genau das passierte
+einmal). **Lokale Test-DB ist jetzt getrennt** (Homebrew-Postgres `careapp_test`, Migration 0004).
+
+### Testergebnis: **113 DB-Tests + 27 Golden/Orchestrierung grün** (inkl. aller 17 Hard Gates)
+
+### Bekannte Einschränkungen / nächste Schritte
+- **MMR-Diversität fehlt:** Bei „was muss ich tun" verdrängen 4 fast identische Kassenbeträge
+  die Vielfalt (Definition/Pflegegrade fallen raus). Lösung: Maximal Marginal Relevance im Ranking.
+- **Lokales pgvector nicht installiert:** Die lokale Test-DB läuft auf Migration `0004` (ohne
+  Embedding-Spalte). Tests bleiben grün (Embedder=None). Für lokalen Embedding-Test: pgvector
+  gegen `postgresql@16` bauen + Migration 0005 lokal anwenden.
+- **Manche Fragen erreichen das Retrieval nicht** (Intent-Schicht fragt zu oft nach) — separat
+  von der Suche.
+- **Enterprise-Datenschutz:** NIM-Embeddings sind US-gehostet. Für Produktion EU-/on-prem-Modell.
+- **Content-Lücke:** Es fehlen prozedurale Claims + ein publizierter Pathway für „Heimunterbringung",
+  damit „was muss ich tun?" echte Handlungsschritte liefert (nicht nur beschreibende Aussagen).
